@@ -6,7 +6,6 @@ from markupsafe import Markup
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
-templates.env.cache = {}
 
 comments_db = []
 
