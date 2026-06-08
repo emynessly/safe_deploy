@@ -107,9 +107,9 @@ async def upload_file(
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="File too large (max 2MB)")
 
-    kind = filetype.guess(contents)
-    if not kind or kind.mime not in ["image/jpeg", "image/png"]:
-        raise HTTPException(status_code=400, detail="Only JPEG/PNG images allowed")
+    #kind = filetype.guess(contents)
+    #if not kind or kind.mime not in ["image/jpeg", "image/png"]:
+    #    raise HTTPException(status_code=400, detail="Only JPEG/PNG images allowed")
     
     if encrypt:
         encrypted_data = cipher.encrypt(contents)
@@ -117,7 +117,7 @@ async def upload_file(
     else:
         file_to_save = contents
         
-    ext = "." + kind.extension
+    ext = ".bin"
     new_filename = str(uuid.uuid4()) + ext
     file_path = os.path.join("storage", new_filename)
 
