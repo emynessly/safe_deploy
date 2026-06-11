@@ -5,7 +5,6 @@ from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 from .schemas import UserCreate
 import bleach, uuid, os, filetype, traceback
-from markupsafe import Markup
 from .logger_config import logger
 
 app = FastAPI()
@@ -33,9 +32,7 @@ files_db = [
 
 MAX_FILE_SIZE = 2 * 1024 * 1024
 
-from fastapi import Depends, HTTPException
-
-def get_current_user(username: str = Header(default="admin", alias="username")):
+def get_current_user(username: str = Header(default="alice", alias="username")):
     return next((u for u in users_db if u["username"] == username), None)
 
 def check_file_permissions(file_id: int, current_user: dict = Depends(get_current_user)):
@@ -116,9 +113,10 @@ async def upload_file(
         logger.warning(f"Upload failed: file too large ({len(contents)} bytes) by {current_user['username']}")
         raise HTTPException(status_code=413, detail="File too large (max 2MB)")
 
-    #kind = filetype.guess(contents)
-    #if not kind or kind.mime not in ["image/jpeg", "image/png"]:
-    #    raise HTTPException(status_code=400, detail="Only JPEG/PNG images allowed")
+    kind = filetype.guess(contents)
+    if not kind or kind.mime not in ["image/jpeg", "image/png"]:
+        logger.warning(f"Upload failed: invalid file type '{kind.mime if kind else 'unknown'}' by {current_user['username']}")
+        raise HTTPException(status_code=400, detail="Only JPEG/PNG images allowed")
     
     if encrypt:
         encrypted_data = cipher.encrypt(contents)
