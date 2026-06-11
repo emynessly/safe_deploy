@@ -3,3 +3,7 @@ __pycache__
 .env
 storage/
 .git
+venv
+.gitignore
+.dockerignore
+docker-compose.yml

@@ -34,7 +34,7 @@ MAX_FILE_SIZE = 2 * 1024 * 1024
 
 from fastapi import Depends, HTTPException
 
-def get_current_user(username: str = Header(default="admin")):
+def get_current_user(username: str = Header(default="admin", alias="username")):
     return next((u for u in users_db if u["username"] == username), None)
 
 def check_file_permissions(file_id: int, current_user: dict = Depends(get_current_user)):
@@ -53,6 +53,17 @@ def clean_text(text: str) -> str:
     cleaned = bleach.clean(text, tags=ALLOWED_TAGS, strip=True)
     return Markup(cleaned)
 
+@app.get("/files/my")
+def get_my_files(current_user: dict = Depends(get_current_user)):
+    my_files = [f for f in files_db if f["owner"] == current_user["username"]]
+    return {"files": my_files}
+
+@app.get("/files/all")
+def get_all_files(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return {"files": files_db}
+
 @app.get("/files/{file_id}")
 def get_file(file: dict = Depends(check_file_permissions)):
     return {"id": file["id"], "name": file["name"], "owner": file["owner"], "size": file["size"]}
@@ -66,17 +77,6 @@ def delete_file(file_id: int, current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Not found")
     files_db.remove(file)
     return {"msg": "File deleted"}
-
-@app.get("/files/my")
-def get_my_files(current_user: dict = Depends(get_current_user)):
-    my_files = [f for f in files_db if f["owner"] == current_user["username"]]
-    return {"files": my_files}
-
-@app.get("/files/all")
-def get_all_files(current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Forbidden")
-    return {"files": files_db}
 
 @app.post("/registration")
 async def registration(user: UserCreate):
