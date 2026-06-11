@@ -1,7 +1,16 @@
--   repo: local
-    hooks:
-    -   id: pip-audit
-        name: pip-audit
-        entry: pip-audit
-        language: system
-        files: requirements.txt
+repos:
+    -   repo: local
+        hooks:
+        -   id: pip-audit
+            name: pip-audit
+            entry: pip-audit -r requirements.txt
+            language: system
+            files: requirements.txt
+            pass_filenames: false
+        
+        -   id: bandit
+            name: bandit
+            entry: bandit -r src/ -ll --exclude venv
+            language: system
+            files: \.py$
+            pass_filenames: false

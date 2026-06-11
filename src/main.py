@@ -52,7 +52,7 @@ ALLOWED_TAGS = ['b', 'i', 'u', 'em', 'strong']
 
 def clean_text(text: str) -> str:
     cleaned = bleach.clean(text, tags=ALLOWED_TAGS, strip=True)
-    return Markup(cleaned)
+    return cleaned
 
 @app.get("/files/my")
 def get_my_files(current_user: dict = Depends(get_current_user)):
