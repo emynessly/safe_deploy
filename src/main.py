@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Request, Form, Header, UploadFile, File, HTTPException, Response
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 from .schemas import UserCreate
-import bleach, uuid, os, filetype
+import bleach, uuid, os, filetype, traceback
 from markupsafe import Markup
+from .logger_config import logger
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -55,17 +56,21 @@ def clean_text(text: str) -> str:
 
 @app.get("/files/my")
 def get_my_files(current_user: dict = Depends(get_current_user)):
+    logger.info(f"User {current_user['username']} requested their files")
     my_files = [f for f in files_db if f["owner"] == current_user["username"]]
     return {"files": my_files}
 
 @app.get("/files/all")
 def get_all_files(current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "admin":
+        logger.warning(f"User {current_user['username']} attempted to access /files/all (non-admin)")
         raise HTTPException(status_code=403, detail="Forbidden")
+    logger.info(f"Admin {current_user['username']} requested all files")
     return {"files": files_db}
 
 @app.get("/files/{file_id}")
 def get_file(file: dict = Depends(check_file_permissions)):
+    logger.info(f"File metadata requested: id={file['id']}, owner={file['owner']}")
     return {"id": file["id"], "name": file["name"], "owner": file["owner"], "size": file["size"]}
 
 @app.delete("/files/{file_id}")
@@ -74,12 +79,15 @@ def delete_file(file_id: int, current_user: dict = Depends(get_current_user)):
     if not file:
         raise HTTPException(status_code=404, detail="Not found")
     if current_user["role"] != "admin" and file["owner"] != current_user["username"]:
+        logger.warning(f"IDOR attempt: {current_user['username']} tried to delete file {file_id} owned by {file['owner']}")
         raise HTTPException(status_code=404, detail="Not found")
     files_db.remove(file)
+    logger.info(f"File deleted: id={file_id} by {current_user['username']}")
     return {"msg": "File deleted"}
 
 @app.post("/registration")
 async def registration(user: UserCreate):
+    logger.info(f"User registered: {user.username}")
     return {"msg": "User created", "user": user.username}
 
 @app.get("/comments")
@@ -105,6 +113,7 @@ async def upload_file(
 ):
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE:
+        logger.warning(f"Upload failed: file too large ({len(contents)} bytes) by {current_user['username']}")
         raise HTTPException(status_code=413, detail="File too large (max 2MB)")
 
     #kind = filetype.guess(contents)
@@ -134,6 +143,7 @@ async def upload_file(
         "is_encrypted": encrypt
     })
     
+    logger.info(f"File uploaded: {file.filename} (id={new_id}) by {current_user['username']}, encrypted={encrypt}")
     return {"msg": "File uploaded", "file_id": new_id, "encrypted": encrypt}
 
 @app.get("/files/{file_id}/download")
@@ -145,6 +155,7 @@ async def download_file(
     if not file_meta:
         raise HTTPException(status_code=404, detail="Not found")
     if current_user["role"] != "admin" and file_meta["owner"] != current_user["username"]:
+        logger.warning(f"IDOR attempt: {current_user['username']} tried to download file {file_id} owned by {file_meta['owner']}")
         raise HTTPException(status_code=404, detail="Not found")
 
     if not os.path.exists(file_meta["path"]):
@@ -157,13 +168,28 @@ async def download_file(
         try:
             file_data = cipher.decrypt(file_data)
         except Exception:
+            logger.error(f"Decryption failed for file {file_id} by {current_user['username']}")
             raise HTTPException(status_code=500, detail="Decryption failed")
 
+        logger.info(f"File downloaded (encrypted): {file_meta['name']} (id={file_id}) by {current_user['username']}")
         return Response(content=file_data, media_type="application/octet-stream", headers={"Content-Disposition": f"attachment; filename={file_meta['name']}"})
     else:
+        logger.info(f"File downloaded: {file_meta['name']} (id={file_id}) by {current_user['username']}")
         return FileResponse(
             path=file_meta["path"],
             filename=file_meta["name"],
             media_type="application/octet-stream",
             headers={"Content-Disposition": f"attachment; filename={file_meta['name']}"}
         )
+        
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {str(exc)}\n{traceback.format_exc()}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "We are sorry, something went wrong."}
+    )
+
+@app.get("/cause_error")
+async def cause_error():
+    return 1 / 0
